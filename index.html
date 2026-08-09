@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#111827">
+<link rel="manifest" href="manifest.webmanifest">
+<title>비밀번호 생성기</title>
+<style>
+:root{color-scheme:dark;--bg:#111827;--card:#1f2937;--muted:#9ca3af;--accent:#3b82f6}
+*{box-sizing:border-box} body{margin:0;min-height:100vh;background:var(--bg);color:#fff;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;padding:16px}
+.wrap{max-width:480px;margin:auto;padding:20px 0} h1{text-align:center}
+#time{text-align:center;color:var(--muted);margin-bottom:20px}
+.card{background:var(--card);border-radius:18px;padding:18px;margin:14px 0}
+.label{color:var(--muted)} .value{font-size:58px;font-weight:800;text-align:center;letter-spacing:5px}
+button{border:0;border-radius:14px;padding:15px;font-size:17px;font-weight:700}
+.open{width:100%;background:var(--accent);color:#fff;margin-top:18px}
+.note{text-align:center;color:var(--muted);font-size:13px;line-height:1.5;margin-top:14px}
+.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);align-items:flex-end;justify-content:center;padding:16px}
+.overlay.show{display:flex}
+.modal{width:100%;max-width:480px;background:#1f2937;border-radius:22px;padding:20px}
+.modal h2,.modal p{text-align:center}.modal p{color:var(--muted)}
+.row{display:grid;grid-template-columns:80px 1fr;gap:12px;align-items:center;margin:12px 0}
+select{width:100%;padding:13px;border-radius:12px;background:#111827;color:#fff;border:1px solid #4b5563;font-size:17px}
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:18px}
+.cancel{background:#374151;color:#fff}.save{background:var(--accent);color:#fff}
+#error{height:20px;color:#fca5a5;text-align:center;font-size:14px}
+</style>
+</head>
+<body>
+<main class="wrap">
+<h1>비밀번호 생성기</h1>
+<div id="time"></div>
+<div id="cards"></div>
+<button class="open" id="openBtn">곱하기 순서 설정</button>
+<div class="note">(연도 − 날짜 + 현재시간) × 배수<br>5자리 결과는 마지막 4자리만 표시</div>
+</main>
+
+<div class="overlay" id="overlay">
+  <div class="modal">
+    <h2>곱하기 순서 설정</h2>
+    <p>표시할 순서를 선택하세요.</p>
+    <div class="row"><label>첫 번째</label><select id="first"><option value="3">×3</option><option value="4">×4</option><option value="7">×7</option></select></div>
+    <div class="row"><label>두 번째</label><select id="second"><option value="3">×3</option><option value="4">×4</option><option value="7">×7</option></select></div>
+    <div class="row"><label>세 번째</label><select id="third"><option value="3">×3</option><option value="4">×4</option><option value="7">×7</option></select></div>
+    <div id="error"></div>
+    <div class="actions">
+      <button class="cancel" id="cancelBtn">취소</button>
+      <button class="save" id="saveBtn">저장</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const DEFAULT_ORDER=[3,4,7];
+let order=JSON.parse(localStorage.getItem("multiplierOrder")||"null")||DEFAULT_ORDER;
+
+function format4(n){
+  let s=String(n);
+  if(s.length<4) return s.padStart(4,"0");
+  if(s.length>4) return s.slice(-4);
+  return s;
+}
+function calculate(m,now){
+  return format4((now.getFullYear()-now.getDate()+now.getHours())*m);
+}
+function render(){
+  const now=new Date();
+  document.getElementById("time").textContent=now.toLocaleString("ko-KR",{hour12:false});
+  document.getElementById("cards").innerHTML=order.map(m=>`<div class="card"><div class="label">×${m}</div><div class="value">${calculate(m,now)}</div></div>`).join("");
+}
+function openSettings(){
+  first.value=order[0]; second.value=order[1]; third.value=order[2];
+  error.textContent=""; overlay.classList.add("show");
+}
+function closeSettings(){overlay.classList.remove("show")}
+function saveSettings(){
+  const next=[Number(first.value),Number(second.value),Number(third.value)];
+  if(new Set(next).size!==3){error.textContent="×3, ×4, ×7을 각각 한 번씩 선택하세요.";return}
+  order=next;
+  localStorage.setItem("multiplierOrder",JSON.stringify(order));
+  render(); closeSettings();
+}
+openBtn.onclick=openSettings; cancelBtn.onclick=closeSettings; saveBtn.onclick=saveSettings;
+overlay.onclick=e=>{if(e.target===overlay)closeSettings()};
+render(); setInterval(render,1000);
+if("serviceWorker" in navigator){navigator.serviceWorker.register("./sw.js").catch(()=>{})}
+</script>
+</body>
+</html>
