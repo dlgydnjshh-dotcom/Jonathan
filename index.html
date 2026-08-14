@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#111827">
+<link rel="manifest" href="manifest.webmanifest">
+<title>비밀번호 생성기</title>
+<style>
+:root{color-scheme:dark;--bg:#111827;--card:#1f2937;--muted:#9ca3af;--accent:#3b82f6;--ok:#86efac;--bad:#fca5a5}
+*{box-sizing:border-box} body{margin:0;min-height:100vh;background:var(--bg);color:#fff;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;padding:16px}
+.wrap{max-width:480px;margin:auto;padding:20px 0} h1{text-align:center}
+#time{text-align:center;color:var(--muted);margin-bottom:8px}
+#sync{text-align:center;color:var(--muted);font-size:12px;margin-bottom:16px;min-height:18px}
+.card{background:var(--card);border-radius:18px;padding:18px;margin:14px 0}
+.label{color:var(--muted)} .value{font-size:58px;font-weight:800;text-align:center;letter-spacing:5px}
+button{border:0;border-radius:14px;padding:15px;font-size:17px;font-weight:700}
+.open{width:100%;background:var(--accent);color:#fff;margin-top:18px}
+.note{text-align:center;color:var(--muted);font-size:13px;line-height:1.5;margin-top:14px}
+.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);align-items:flex-end;justify-content:center;padding:16px}
+.overlay.show{display:flex}
+.modal{width:100%;max-width:480px;background:#1f2937;border-radius:22px;padding:20px}
+.modal h2,.modal p{text-align:center}.modal p{color:var(--muted)}
+.row{display:grid;grid-template-columns:80px 1fr;gap:12px;align-items:center;margin:12px 0}
+input{width:100%;padding:13px;border-radius:12px;background:#111827;color:#fff;border:1px solid #4b5563;font-size:17px}
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:18px}
+.cancel{background:#374151;color:#fff}.save{background:var(--accent);color:#fff}
+#error{min-height:20px;color:var(--bad);text-align:center;font-size:14px}
+</style>
+</head>
+<body>
+<main class="wrap">
+<h1>비밀번호 생성기</h1>
+<div id="time"></div>
+<div id="sync">공용 설정 불러오는 중...</div>
+<div id="cards"></div>
+<button class="open" id="openBtn">곱하기 숫자 변경</button>
+<div class="note">(연도 − 날짜 + 현재시간) × 배수<br>5자리 결과는 마지막 4자리만 표시<br>누가 변경해도 같은 링크를 쓰는 사람 모두에게 적용됩니다.</div>
+</main>
+
+<div class="overlay" id="overlay">
+  <div class="modal">
+    <h2>곱하기 숫자 변경</h2>
+    <p>원하는 정수를 직접 입력하세요.</p>
+    <div class="row"><label for="first">첫 번째</label><input id="first" type="number" step="1" inputmode="numeric"></div>
+    <div class="row"><label for="second">두 번째</label><input id="second" type="number" step="1" inputmode="numeric"></div>
+    <div class="row"><label for="third">세 번째</label><input id="third" type="number" step="1" inputmode="numeric"></div>
+    <div id="error"></div>
+    <div class="actions">
+      <button class="cancel" id="cancelBtn">취소</button>
+      <button class="save" id="saveBtn">전체에 적용</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const DEFAULT_ORDER=[3,4,7];
+const API="/.netlify/functions/settings";
+let order=[...DEFAULT_ORDER];
+let lastVersion=0;
+let saving=false;
+
+const $=id=>document.getElementById(id);
+const first=$("first"),second=$("second"),third=$("third"),overlay=$("overlay"),error=$("error"),sync=$("sync");
+
+function format4(n){
+  let s=String(Math.trunc(n));
+  const neg=s.startsWith("-");
+  if(neg) s=s.slice(1);
+  if(s.length<4) s=s.padStart(4,"0");
+  if(s.length>4) s=s.slice(-4);
+  return neg?"-"+s:s;
+}
+function calculate(m,now){
+  return format4((now.getFullYear()-now.getDate()+now.getHours())*m);
+}
+function render(){
+  const now=new Date();
+  $("time").textContent=now.toLocaleString("ko-KR",{hour12:false});
+  $("cards").innerHTML=order.map(m=>`<div class="card"><div class="label">×${m}</div><div class="value">${calculate(m,now)}</div></div>`).join("");
+}
+function validOrder(v){
+  return Array.isArray(v)&&v.length===3&&v.every(n=>Number.isInteger(n)&&Number.isFinite(n));
+}
+async function loadShared(showStatus=false){
+  if(saving) return;
+  try{
+    if(showStatus) sync.textContent="공용 설정 불러오는 중...";
+    const r=await fetch(API,{cache:"no-store",headers:{"accept":"application/json"}});
+    if(!r.ok) throw new Error("load failed");
+    const data=await r.json();
+    if(validOrder(data.order)){
+      const incomingVersion=Number(data.updatedAt)||0;
+      if(incomingVersion>=lastVersion){
+        order=data.order;
+        lastVersion=incomingVersion;
+        render();
+      }
+    }
+    sync.textContent="공용 설정 연결됨";
+  }catch(e){
+    sync.textContent="공용 설정 연결 실패 · 잠시 후 자동 재시도";
+  }
+}
+function openSettings(){
+  first.value=order[0];second.value=order[1];third.value=order[2];
+  error.textContent="";overlay.classList.add("show");
+}
+function closeSettings(){overlay.classList.remove("show")}
+async function saveSettings(){
+  const next=[Number(first.value),Number(second.value),Number(third.value)];
+  if(!validOrder(next)){error.textContent="세 칸 모두 정수로 입력하세요.";return}
+  saving=true;
+  error.textContent="저장 중...";
+  $("saveBtn").disabled=true;
+  try{
+    const r=await fetch(API,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({order:next})});
+    const data=await r.json().catch(()=>({}));
+    if(!r.ok) throw new Error(data.error||"save failed");
+    order=data.order;
+    lastVersion=Number(data.updatedAt)||Date.now();
+    render();
+    sync.textContent="방금 변경한 공용 설정이 저장됨";
+    closeSettings();
+  }catch(e){
+    error.textContent="저장에 실패했습니다. 다시 시도하세요.";
+  }finally{
+    saving=false;
+    $("saveBtn").disabled=false;
+  }
+}
+$("openBtn").onclick=openSettings;$("cancelBtn").onclick=closeSettings;$("saveBtn").onclick=saveSettings;
+overlay.onclick=e=>{if(e.target===overlay)closeSettings()};
+render();
+loadShared(true);
+setInterval(render,1000);
+setInterval(()=>loadShared(false),2000);
+</script>
+</body>
+</html>
