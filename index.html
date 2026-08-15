@@ -131,10 +131,15 @@ async function saveSettings(){
 }
 $("openBtn").onclick=openSettings;$("cancelBtn").onclick=closeSettings;$("saveBtn").onclick=saveSettings;
 overlay.onclick=e=>{if(e.target===overlay)closeSettings()};
-render();
-loadShared(true);
-setInterval(render,1000);
-setInterval(()=>loadShared(false),2000);
+loadShared(true).then(() => {
+
+  render();
+
+});
+
+setInterval(render, 1000);
+
+setInterval(() => loadShared(false), 2000);
 </script>
 </body>
 </html>
